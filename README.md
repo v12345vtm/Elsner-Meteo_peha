@@ -15,6 +15,35 @@ Add the following to your `configuration.yaml` file:
     variant: cet   # optioneel, "cet" is de default
     
 ```
+
+
+```yaml
+type: entities
+title: Weather station
+entities:
+  - sensor.weather_station_temperature
+  - sensor.weather_station_wind
+  - sensor.weather_station_sun_south
+  - sensor.weather_station_sun_west
+  - sensor.weather_station_sun_east
+  - sensor.weather_station_daylight
+  - sensor.weather_station_twilight
+  - sensor.weather_station_rain
+  - sensor.weather_station_weekday
+  - sensor.weather_station_day
+  - sensor.weather_station_month
+  - sensor.weather_station_year
+  - sensor.weather_station_hour
+  - sensor.weather_station_minute
+  - sensor.weather_station_second
+  - sensor.weather_station_summer_time
+    
+```
+
+
+
+
+
  Architectuur-voorstel
 
 In plaats van 1 ruwe string-sensor + losse template:-sensoren met handmatige slices (foutgevoelig, zoals we al zagen), splits ik het in drie lagen:

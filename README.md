@@ -24,6 +24,14 @@ Eén gedeelde ElsnerHub — leest de seriële poort (met de readuntil(b"\x03")-f
 ElsnerFieldSensor — één sensor-entiteit per veld uit het protocol, automatisch aangemaakt. Geen template: YAML meer nodig.
 
 
+
+Dit levert automatisch aparte entiteiten op: sensor.weather_station_temperature, ..._wind, ..._sun_south, ..._daylight, ..._rain, ..._day, ..._month, ..._year, ..._hour, ..._minute, ..._second, ..._summer_time, enz. — elk al correct getypeerd (float/int/bool) en met de juiste eenheid.
+
+
+
+
+
+
 De checksum klopt zelfs voor alle testframes — dat is een mooie bevestiging dat de veldindeling exact goed is (en je kunt verify_checksum() later gebruiken om corrupte frames automatisch te laten weggooien).
 
 

@@ -49,7 +49,7 @@ sensor:
   - platform: elsner
     name: weather_station
     serial_port: /dev/ttyACM1
-    variant: cet   # optional, "cet" is the default
+    #variant: cet   # optional, "cet" is the default
 ```
 
 | Parameter      | Required | Default            | Description                                                                                     |
@@ -57,7 +57,7 @@ sensor:
 | `platform`     | yes      | –                   | Must be `elsner`.                                                                                  |
 | `serial_port`  | yes      | –                   | Path to the serial device the station is connected to, e.g. `/dev/ttyACM1` or `/dev/ttyUSB0`.     |
 | `name`         | no       | `Weather station`   | Base name used as a prefix for every generated entity, e.g. `weather_station` → `sensor.weather_station_temperature`. |
-| `variant`      | no       | `cet`               | Which frame protocol the station is outputting. Currently only `cet` is implemented; `gps` and `plain` are reserved for future use (see below). |
+ 
 
 The baud rate (19200) is fixed to match the station's datasheet and isn't
 configurable.
@@ -121,7 +121,7 @@ entities:
 The integration is split into three layers so that supporting another
 protocol variant never touches the parts that already work:
 
-- **`protocols.py`** — pure data. Each variant (`cet`, `gps`, `plain`) is an
+- **`protocols.py`** — pure data. Each variant (`cet`, `gps`) is an
   ordered tuple of `Field`s, each with its byte offsets (straight from the
   Elsner datasheet), unit, and type cast. This is the *only* file you touch
   to add a variant.
@@ -139,22 +139,12 @@ the hub to drop frames whose checksum doesn't match (the CET variant's
 checksum was verified against real captured frames during development and
 matches).
 
-## Adding another variant
-
-To support the GPS variant (or the plain variant with no date/time):
-
-1. Open `protocols.py` and fill in `GPS_FIELDS` (or `PLAIN_FIELDS`) using the
-   byte table from that variant's page in the Elsner datasheet — follow the
-   same pattern as `CET_FIELDS` (name, start/end byte offset, unit, cast).
-2. Uncomment the matching entry in the `PROTOCOLS` dict, giving it the
-   correct start character (`"G"` for GPS, `"W"` for plain) and frame
-   length.
-3. Set `variant: gps` (or `variant: plain`) in your `configuration.yaml`.
+ 
 
 `sensor.py` and `ElsnerHub` don't need any changes — they read whichever
 protocol is selected and build entities from its field list automatically.
 
 ## Credits
-
+V12345vtm
 Protocol details taken from the Elsner *P03/3-RS485-GPS/CET Weather Station*
 datasheet (version 23.10.2023).

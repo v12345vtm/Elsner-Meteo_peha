@@ -35,3 +35,16 @@ Dit levert automatisch aparte entiteiten op: sensor.weather_station_temperature,
 De checksum klopt zelfs voor alle testframes — dat is een mooie bevestiging dat de veldindeling exact goed is (en je kunt verify_checksum() later gebruiken om corrupte frames automatisch te laten weggooien).
 
 
+
+
+
+Later GPS of "plain" toevoegen
+
+Als je ooit een GPS- of niet-CET-variant wilt uitlezen, hoef je alleen in protocols.py:
+
+GPS_FIELDS (of PLAIN_FIELDS) te vullen met de byte-offsets uit de betreffende datasheet-tabel (zelfde patroon als CET_FIELDS),
+de bijbehorende regel in PROTOCOLS te uncommenten,
+
+en dan variant: gps te zetten in je YAML. sensor.py en de hub-logica blijven ongewijzigd — dat is precies de modulariteit die je zocht.
+
+

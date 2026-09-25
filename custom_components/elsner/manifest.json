@@ -2,6 +2,9 @@
   "version": "0.0.1",
   "domain": "elsner",
   "name": "Elsner P04/3",
+  "codeowners": ["@v12345vtm"],
+  "documentation": "https://www.youtube.com/@Electronieks",
+  "issue_tracker": "https://github.com/v12345vtm/Elsner-Meteo_peha/issues",
   "iot_class": "local_polling",
   "requirements": ["pyserial-asyncio-fast==0.16"]
 }

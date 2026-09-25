@@ -22,3 +22,8 @@ In plaats van 1 ruwe string-sensor + losse template:-sensoren met handmatige sli
 protocols.py — puur data: per variant (cet, gps, plain) een lijst van velden met hun byte-offsets, eenheid en type-cast. Dit is het enige bestand dat je aanpast om GPS of de kale variant toe te voegen.
 Eén gedeelde ElsnerHub — leest de seriële poort (met de readuntil(b"\x03")-fix van hiervoor), kiest het protocol op basis van config, parsed elk frame naar een dict, en verspreidt die naar alle entiteiten.
 ElsnerFieldSensor — één sensor-entiteit per veld uit het protocol, automatisch aangemaakt. Geen template: YAML meer nodig.
+
+
+De checksum klopt zelfs voor alle testframes — dat is een mooie bevestiging dat de veldindeling exact goed is (en je kunt verify_checksum() later gebruiken om corrupte frames automatisch te laten weggooien).
+
+

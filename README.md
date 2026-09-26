@@ -7,8 +7,8 @@ its own Home Assistant sensor entity — no `template:` sensors or manual
 string-slicing required.
 
 Supports the **CET** variant out of the box. The **GPS** and **plain**
-variants are stubbed in and can be added without touching the integration's
-core logic — see [Adding another variant](#adding-another-variant) below.
+
+![Elsner OEM  or Peha meteo](https://i.imgur.com/j1rQMRT.png)
 
 ## How it works
 

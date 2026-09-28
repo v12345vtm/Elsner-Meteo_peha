@@ -1,44 +1,67 @@
 # Elsner Weather Station (P03/3-RS485)
 
+![Elsner OEM or Peha meteo](https://i.imgur.com/j1rQMRT.png)
+
 A Home Assistant custom integration for the **Elsner P03/3-RS485** weather
 station family (temperature, wind, sun brightness, rain, daylight). It talks
 to the station over its RS485/serial output and exposes each measurement as
 its own Home Assistant sensor entity — no `template:` sensors or manual
 string-slicing required.
 
-OEM brands  : 
-Eltako wms 485 :     https://www.eltako.com/en/catalog/products/17/wms  of https://www.conrad.be/nl/p/eltako-wms-multisensor-voor-weergegevens-opbouw-op-muur-3398210.html 400euro
+Both frame shapes the device can send are supported out of the box: **CET**
+(`W...` frames) and **GPS** (`G...` frames, adding UTC time and sun azimuth/
+elevation/position). Nothing to configure — the integration detects which
+one your station sends from the first byte of the first frame and builds
+the matching entities automatically (see [How it works](#how-it-works)).
 
-elsner p03-3-rs485 : https://www.elsner-elektronik.de/en/p03-3-rs485.html  408euro
+## Compatible hardware
 
-peha WES940 : https://portal.vanegmond.nl/producten/peha-fysische-sensor-bussysteem-d-940-wes/2077988  1000euro
+The Elsner P03/3-RS485 appears to be sold under other brand names as well,
+seemingly the same hardware with an OEM label. These are reported to use the
+same RS485 ASCII protocol (`W`/`G` frames as described below), so this
+integration should work with them unmodified — but that's based on the specs
+looking identical, not on having tested each one directly, so treat it as
+"likely compatible" rather than guaranteed until confirmed against a real
+serial log.
 
+| Brand              | Model         | Approx. price | Product page                                                                                                                                     |
+|---------------------|---------------|:---------------:|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| Elsner Elektronik    | P03/3-RS485   | €408           | [elsner-elektronik.de](https://www.elsner-elektronik.de/en/p03-3-rs485.html)                                                                    |
+| Eltako               | WMS 485       | €400           | [eltako.com](https://www.eltako.com/en/catalog/products/17/wms) · [conrad.be](https://www.conrad.be/nl/p/eltako-wms-multisensor-voor-weergegevens-opbouw-op-muur-3398210.html) |
+| PEHA (by ABB)        | WES 940       | €1000          | [portal.vanegmond.nl](https://portal.vanegmond.nl/producten/peha-fysische-sensor-bussysteem-d-940-wes/2077988)                                  |
 
-
-Supports the **CET** variant out of the box. The **GPS** and **plain**
-
-![Elsner OEM  or Peha meteo](https://i.imgur.com/j1rQMRT.png)
+If you're running this integration against one of the other brands, an issue
+or PR confirming it (ideally with a raw serial log captured the same way as
+the frames this protocol table was built from) is very welcome — it turns
+"likely compatible" into a confirmed entry in this table.
 
 ## How it works
 
 The weather station streams one ASCII frame per second, terminated with an
-ETX (`0x03`) byte. The integration opens the serial port once, reads frame
-by frame, decodes it according to the selected protocol, and fans the parsed
-values out to one sensor entity per field:
+ETX (`0x03`) byte. In practice there are only two frame shapes: frames
+starting with `W` (weather data only - the CET variant) and frames starting
+with `G` (adds GPS/UTC time and sun position). The integration opens the
+serial port once, reads frame by frame, **auto-detects which protocol is in
+use from that first byte**, and fans the parsed values out to one sensor
+entity per field:
 
 ```mermaid
 flowchart LR
     A["Weather station<br/>(RS485 / serial)"] -->|"one ASCII frame<br/>per second, ends in 0x03"| B["ElsnerHub<br/>reads until 0x03"]
-    B --> C["protocols.py<br/>parse_frame()"]
-    C --> D1["sensor.temperature"]
-    C --> D2["sensor.wind"]
-    C --> D3["sensor.sun_south"]
-    C --> D4["sensor. ...one per field"]
+    B --> E{"first byte?"}
+    E -->|"W"| C1["CET protocol"]
+    E -->|"G"| C2["GPS protocol"]
+    C1 --> D1["sensor.temperature"]
+    C1 --> D2["sensor.wind"]
+    C1 --> D3["sensor. ...one per field"]
+    C2 --> D4["sensor. ...GPS fields"]
 ```
 
-Reading frame-by-frame (rather than a fixed byte count) matters because the
-frame length differs per protocol variant and because a fixed-size read can
-drift out of sync with the actual frame boundaries over time.
+The protocol is detected once, from the very first frame the integration
+sees after startup - the field entities are then created to match. Reading
+frame-by-frame (rather than a fixed byte count) matters because the frame
+length differs per protocol variant and because a fixed-size read can drift
+out of sync with the actual frame boundaries over time.
 
 ## Installation
 
@@ -58,7 +81,6 @@ sensor:
   - platform: elsner
     name: weather_station
     serial_port: /dev/ttyACM1
-    #variant: cet   # optional, "cet" is the default
 ```
 
 | Parameter      | Required | Default            | Description                                                                                     |
@@ -66,7 +88,11 @@ sensor:
 | `platform`     | yes      | –                   | Must be `elsner`.                                                                                  |
 | `serial_port`  | yes      | –                   | Path to the serial device the station is connected to, e.g. `/dev/ttyACM1` or `/dev/ttyUSB0`.     |
 | `name`         | no       | `Weather station`   | Base name used as a prefix for every generated entity, e.g. `weather_station` → `sensor.weather_station_temperature`. |
- 
+
+There's no `variant` setting to get wrong: the integration reads the first
+byte of the first frame it receives (`W` or `G`) and builds the matching
+entities automatically. Entities only appear once that first frame has been
+read, so give it a second or two after startup.
 
 The baud rate (19200) is fixed to match the station's datasheet and isn't
 configurable.
@@ -77,7 +103,8 @@ configurable.
 
 ## Entities
 
-With `name: weather_station` and `variant: cet`, the integration creates:
+With `name: weather_station` and a station sending **CET** (`W...`) frames,
+the integration creates:
 
 | Entity                                | Type    | Unit  | Description                                  |
 |----------------------------------------|---------|-------|-----------------------------------------------|
@@ -100,6 +127,38 @@ With `name: weather_station` and `variant: cet`, the integration creates:
 
 Wind is reported in m/s straight from the datasheet; multiply by 3.6 in a
 template sensor if you'd rather have km/h.
+
+If your station instead sends **GPS** (`G...`) frames, you get a different
+set of entities — the shared measurements (temperature, sun, wind, rain)
+plus UTC time and sun position instead of local date/time:
+
+| Entity                                        | Type  | Unit  | Description                                      |
+|-------------------------------------------------|-------|-------|-----------------------------------------------------|
+| `sensor.weather_station_temperature`             | float | °C    | Outdoor temperature                                 |
+| `sensor.weather_station_wind`                    | float | m/s   | Wind speed                                          |
+| `sensor.weather_station_sun_south`               | int   | klx   | South-facing brightness sensor                      |
+| `sensor.weather_station_sun_west`                | int   | klx   | West-facing brightness sensor                       |
+| `sensor.weather_station_sun_east`                | int   | klx   | East-facing brightness sensor                       |
+| `sensor.weather_station_daylight`                | int   | lx    | General daylight level                              |
+| `sensor.weather_station_twilight`                | bool  | –     | `true` below ~10 lx                                 |
+| `sensor.weather_station_rain`                    | bool  | –     | `true` while the heated rain sensor is wet          |
+| `sensor.weather_station_weekday`                 | str   | –     | UTC weekday, `1`–`7`, or `?` if not synced          |
+| `sensor.weather_station_day`                     | int   | –     | UTC day of month                                    |
+| `sensor.weather_station_month`                   | int   | –     | UTC month                                           |
+| `sensor.weather_station_year`                    | int   | –     | UTC two-digit year                                  |
+| `sensor.weather_station_hour`                    | int   | –     | UTC hour                                            |
+| `sensor.weather_station_minute`                  | int   | –     | UTC minute                                          |
+| `sensor.weather_station_second`                  | int   | –     | UTC second                                          |
+| `sensor.weather_station_gps_status`              | int   | –     | `1` = GPS fix OK, `0` = not OK                      |
+| `sensor.weather_station_azimuth`                 | float | °     | Sun azimuth                                         |
+| `sensor.weather_station_elevation`               | float | °     | Sun elevation                                       |
+| `sensor.weather_station_longitude_direction`     | str   | –     | `O` (east) or `W` (west)                            |
+| `sensor.weather_station_longitude`               | float | °     | Longitude, unsigned — combine with the direction above |
+| `sensor.weather_station_latitude_direction`      | str   | –     | `N` (north) or `S` (south)                          |
+| `sensor.weather_station_latitude`                | float | °     | Latitude, unsigned — combine with the direction above  |
+
+A station only ever sends one of these two frame shapes, so you'll only ever
+see one of these two entity sets for a given `serial_port`.
 
 ### Example Lovelace card
 
@@ -135,11 +194,13 @@ protocol variant never touches the parts that already work:
   Elsner datasheet), unit, and type cast. This is the *only* file you touch
   to add a variant.
 - **`ElsnerHub`** — owns the single serial connection for a configured
-  platform entry. It reads one frame at a time up to the `0x03` terminator,
-  discards anything that doesn't start with the expected marker character
-  (auto-resync on a corrupted or truncated frame), parses it via
-  `protocols.parse_frame()`, and pushes the resulting dict to every
-  registered entity.
+  platform entry. It reads one frame at a time up to the `0x03` terminator.
+  On the first frame it ever sees, it looks at the start byte (`W` or `G`),
+  picks the matching protocol, and builds the entities for that protocol's
+  fields on the spot. From then on it discards anything that doesn't start
+  with that same byte (auto-resync on a corrupted or truncated frame),
+  parses each frame via `protocols.parse_frame()`, and pushes the resulting
+  dict to every registered entity.
 - **`ElsnerFieldSensor`** — one lightweight entity per field. It just reads
   its own key out of whatever dict the hub last handed it.
 
@@ -148,12 +209,20 @@ the hub to drop frames whose checksum doesn't match (the CET variant's
 checksum was verified against real captured frames during development and
 matches).
 
- 
+## Both frame shapes are already implemented
 
-`sensor.py` and `ElsnerHub` don't need any changes — they read whichever
-protocol is selected and build entities from its field list automatically.
+Earlier versions of this README described GPS support as a TODO. That's
+done now: `protocols.py` has both `CET_FIELDS` and `GPS_FIELDS` filled in
+from the datasheet's byte tables, and both are registered in `PROTOCOLS`.
+There's nothing left to fill in for either shape the device can send.
+
+If Elsner ever ships a third frame variant, the same pattern still applies:
+add a `Field` tuple for it in `protocols.py` and register it in `PROTOCOLS`
+with its start byte — `sensor.py` and `ElsnerHub` don't need any changes,
+since they already read whichever protocol matches the frame's first byte
+and build entities from its field list.
 
 ## Credits
-V12345vtm
+
 Protocol details taken from the Elsner *P03/3-RS485-GPS/CET Weather Station*
 datasheet (version 23.10.2023).

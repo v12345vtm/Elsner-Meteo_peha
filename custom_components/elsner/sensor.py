@@ -121,7 +121,11 @@ class ElsnerHub:
             logged_error = False
             while True:
                 try:
-                    raw = await reader.readuntil(b"\x03")
+                    raw = await asyncio.wait_for(reader.readuntil(b"\x03"), timeout=10.0)
+                except asyncio.TimeoutError:
+                    _LOGGER.warning("Time-out: Geen data ontvangen binnen 10 seconden op %s", self._port)
+                    await self._handle_error()
+                    break
                 except asyncio.IncompleteReadError:
                     _LOGGER.exception("Incomplete frame from %s", self._port)
                     await self._handle_error()
@@ -148,16 +152,8 @@ class ElsnerHub:
                     continue
 
                 if self._protocol is None:
-                    # First valid frame we've ever seen from this device -
-                    # detect the protocol and build entities for it.
                     self._setup_entities_for_protocol(PROTOCOLS_BY_START[start_char])
                 elif start_char != self._protocol.start_char:
-                    # Once locked onto a protocol, a frame starting with the
-                    # *other* letter is either serial noise or a resync
-                    # issue, not a genuine device mode switch - drop it
-                    # rather than parsing it with the wrong field layout
-                    # and feeding partially-wrong values to entities that
-                    # belong to the other protocol.
                     _LOGGER.debug(
                         "Discarding frame with unexpected start byte %r "
                         "(locked onto protocol '%s')",
@@ -168,7 +164,6 @@ class ElsnerHub:
 
                 protocol = self._protocol
 
-                # Validate frame length for detected protocol
                 if len(frame) != protocol.frame_length:
                     _LOGGER.debug(
                         "Frame length mismatch for protocol '%s': expected %d, got %d",
@@ -193,6 +188,7 @@ class ElsnerFieldSensor(SensorEntity):
     """One entity for one field of the detected protocol."""
 
     _attr_should_poll = False
+    _attr_available = False
 
     def __init__(self, hub: ElsnerHub, base_name: str, field: Field) -> None:
         self._hub = hub
@@ -202,12 +198,30 @@ class ElsnerFieldSensor(SensorEntity):
         self._attr_device_class = field.device_class
         self._attr_icon = field.icon
         self._attr_native_value = None
-        # Based on the serial port + field key, not the (renameable) friendly
-        # name, so the unique_id stays stable even if `name:` in
-        # configuration.yaml is changed later. One physical station per
-        # serial port is assumed, which matches how the hub is set up.
         self._attr_unique_id = f"elsner_{slugify(hub.port)}_{field.key}"
+        
+        # FIX: Vertel Home Assistant expliciet dat deze entiteit 3 decimalen moet tonen
+        if field.unit in ("lx", "klx"):
+            self._attr_suggested_display_precision = 3
 
     def handle_values(self, values: dict[str, object] | None) -> None:
-        self._attr_native_value = values.get(self._field.key) if values else None
-        self.async_write_ha_state()
+        if values is None:
+            if self._attr_available:
+                self._attr_available = False
+                self.async_write_ha_state()
+            return
+
+        new_value = values.get(self._field.key)
+        
+        # Zorg ervoor dat het intern als float verwerkt wordt, HA regelt de weergave 
+        # op basis van de suggested_display_precision (3)
+        if self._field.unit in ("lx", "klx") and new_value is not None:
+            try:
+                new_value = float(new_value)
+            except (ValueError, TypeError):
+                pass
+        
+        if not self._attr_available or self._attr_native_value != new_value:
+            self._attr_native_value = new_value
+            self._attr_available = True
+            self.async_write_ha_state()

@@ -1,5 +1,5 @@
 {
-  "version": "0.0.3",
+  "version": "0.0.5",
   "domain": "elsner",
   "name": "Elsner P03/3-RS485-GPS-CET Weather Station",
   "codeowners": ["@v12345vtm"],

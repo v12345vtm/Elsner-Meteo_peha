@@ -9,6 +9,10 @@ string-slicing required.
 OEM brands  : 
 https://www.eltako.com/en/catalog/products/17/wms
 
+https://www.elsner-elektronik.de/en/p03-3-rs485.html
+
+
+
 
 Supports the **CET** variant out of the box. The **GPS** and **plain**
 

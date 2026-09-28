@@ -6,6 +6,10 @@ to the station over its RS485/serial output and exposes each measurement as
 its own Home Assistant sensor entity — no `template:` sensors or manual
 string-slicing required.
 
+OEM brands  : 
+https://www.eltako.com/en/catalog/products/17/wms
+
+
 Supports the **CET** variant out of the box. The **GPS** and **plain**
 
 ![Elsner OEM  or Peha meteo](https://i.imgur.com/j1rQMRT.png)

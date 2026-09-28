@@ -1,9 +1,9 @@
 {
-  "version": "0.0.1",
+  "version": "0.0.3",
   "domain": "elsner",
-  "name": "Elsner P04/3",
+  "name": "Elsner P03/3-RS485-GPS-CET Weather Station",
   "codeowners": ["@v12345vtm"],
-  "documentation": "https://www.youtube.com/@Electronieks",
+  "documentation": "https://github.com/v12345vtm/Elsner-Meteo_peha",
   "issue_tracker": "https://github.com/v12345vtm/Elsner-Meteo_peha/issues",
   "iot_class": "local_polling",
   "requirements": ["pyserial-asyncio-fast==0.16"]

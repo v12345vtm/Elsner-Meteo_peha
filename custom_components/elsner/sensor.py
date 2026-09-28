@@ -13,6 +13,7 @@ from homeassistant.core import HomeAssistant, callback
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.util import slugify
 
 from .protocols import PROTOCOLS_BY_START, Field, Protocol, parse_frame
 
@@ -69,6 +70,10 @@ class ElsnerHub:
 
     async def async_start(self) -> None:
         self._task = self.hass.loop.create_task(self._read_loop())
+
+    @property
+    def port(self) -> str:
+        return self._port
 
     @callback
     def stop(self, event) -> None:
@@ -142,11 +147,26 @@ class ElsnerHub:
                     _LOGGER.debug("Discarding unrecognized frame start: %r", frame)
                     continue
 
-                protocol = PROTOCOLS_BY_START[start_char]
-
-                # Auto-initialize entities on first valid payload received
                 if self._protocol is None:
-                    self._setup_entities_for_protocol(protocol)
+                    # First valid frame we've ever seen from this device -
+                    # detect the protocol and build entities for it.
+                    self._setup_entities_for_protocol(PROTOCOLS_BY_START[start_char])
+                elif start_char != self._protocol.start_char:
+                    # Once locked onto a protocol, a frame starting with the
+                    # *other* letter is either serial noise or a resync
+                    # issue, not a genuine device mode switch - drop it
+                    # rather than parsing it with the wrong field layout
+                    # and feeding partially-wrong values to entities that
+                    # belong to the other protocol.
+                    _LOGGER.debug(
+                        "Discarding frame with unexpected start byte %r "
+                        "(locked onto protocol '%s')",
+                        start_char,
+                        self._protocol.start_char,
+                    )
+                    continue
+
+                protocol = self._protocol
 
                 # Validate frame length for detected protocol
                 if len(frame) != protocol.frame_length:
@@ -180,7 +200,13 @@ class ElsnerFieldSensor(SensorEntity):
         self._attr_name = f"{base_name} {field.name}"
         self._attr_native_unit_of_measurement = field.unit
         self._attr_device_class = field.device_class
+        self._attr_icon = field.icon
         self._attr_native_value = None
+        # Based on the serial port + field key, not the (renameable) friendly
+        # name, so the unique_id stays stable even if `name:` in
+        # configuration.yaml is changed later. One physical station per
+        # serial port is assumed, which matches how the hub is set up.
+        self._attr_unique_id = f"elsner_{slugify(hub.port)}_{field.key}"
 
     def handle_values(self, values: dict[str, object] | None) -> None:
         self._attr_native_value = values.get(self._field.key) if values else None

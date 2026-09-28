@@ -24,6 +24,7 @@ class Field:
     unit: str | None = None
     device_class: str | None = None
     cast: Callable[[str], object] = str
+    icon: str | None = None  # MDI icon shown next to the entity, e.g. "mdi:thermometer"
 
 
 @dataclass(frozen=True)
@@ -36,50 +37,50 @@ class Protocol:
 
 # --- P03/3-RS485-CET (Start with "W", 39 bytes payload) ---
 CET_FIELDS: tuple[Field, ...] = (
-    Field("temperature", "Temperature", 1, 6, "°C", "temperature", float),
-    Field("sun_south", "Sun south", 6, 8, "klx", None, int),
-    Field("sun_west", "Sun west", 8, 10, "klx", None, int),
-    Field("sun_east", "Sun east", 10, 12, "klx", None, int),
-    Field("twilight", "Twilight", 12, 13, None, None, _flag),
-    Field("daylight", "Daylight", 13, 16, "lx", "illuminance", int),
-    Field("wind", "Wind", 16, 20, "m/s", None, float),
-    Field("rain", "Rain", 20, 21, None, None, _flag),
-    Field("weekday", "Weekday", 21, 22, None, None, str),
-    Field("day", "Day", 22, 24, None, None, int),
-    Field("month", "Month", 24, 26, None, None, int),
-    Field("year", "Year", 26, 28, None, None, int),
-    Field("hour", "Hour", 28, 30, None, None, int),
-    Field("minute", "Minute", 30, 32, None, None, int),
-    Field("second", "Second", 32, 34, None, None, int),
-    Field("summer_time", "Summer time", 34, 35, None, None, str),
-    Field("checksum", "Checksum", 35, 39, None, None, int),
+    Field("temperature", "Temperature", 1, 6, "°C", "temperature", float, icon="mdi:thermometer"),
+    Field("sun_south", "Sun south", 6, 8, "klx", None, int, icon="mdi:sun-compass"),
+    Field("sun_west", "Sun west", 8, 10, "klx", None, int, icon="mdi:sun-compass"),
+    Field("sun_east", "Sun east", 10, 12, "klx", None, int, icon="mdi:sun-compass"),
+    Field("twilight", "Twilight", 12, 13, None, None, _flag, icon="mdi:weather-sunset"),
+    Field("daylight", "Daylight", 13, 16, "lx", "illuminance", int, icon="mdi:brightness-5"),
+    Field("wind", "Wind", 16, 20, "m/s", None, float, icon="mdi:weather-windy"),
+    Field("rain", "Rain", 20, 21, None, None, _flag, icon="mdi:weather-pouring"),
+    Field("weekday", "Weekday", 21, 22, None, None, str, icon="mdi:calendar-week"),
+    Field("day", "Day", 22, 24, None, None, int, icon="mdi:calendar"),
+    Field("month", "Month", 24, 26, None, None, int, icon="mdi:calendar-month"),
+    Field("year", "Year", 26, 28, None, None, int, icon="mdi:calendar"),
+    Field("hour", "Hour", 28, 30, None, None, int, icon="mdi:clock-outline"),
+    Field("minute", "Minute", 30, 32, None, None, int, icon="mdi:clock-outline"),
+    Field("second", "Second", 32, 34, None, None, int, icon="mdi:clock-outline"),
+    Field("summer_time", "Summer time", 34, 35, None, None, str, icon="mdi:sun-clock"),
+    Field("checksum", "Checksum", 35, 39, None, None, int, icon="mdi:pound"),
 )
 
 # --- P03/3-RS485-GPS (Start with "G", 60 bytes payload) ---
 GPS_FIELDS: tuple[Field, ...] = (
-    Field("temperature", "Temperature", 1, 6, "°C", "temperature", float),
-    Field("sun_south", "Sun south", 6, 8, "klx", None, int),
-    Field("sun_west", "Sun west", 8, 10, "klx", None, int),
-    Field("sun_east", "Sun east", 10, 12, "klx", None, int),
-    Field("twilight", "Twilight", 12, 13, None, None, _flag),
-    Field("daylight", "Daylight", 13, 16, "lx", "illuminance", int),
-    Field("wind", "Wind", 16, 20, "m/s", None, float),
-    Field("rain", "Rain", 20, 21, None, None, _flag),
-    Field("weekday", "Weekday", 21, 22, None, None, str),
-    Field("day", "Day", 22, 24, None, None, int),
-    Field("month", "Month", 24, 26, None, None, int),
-    Field("year", "Year", 26, 28, None, None, int),
-    Field("hour", "Hour", 28, 30, None, None, int),
-    Field("minute", "Minute", 30, 32, None, None, int),
-    Field("second", "Second", 32, 34, None, None, int),
-    Field("gps_status", "GPS Status", 34, 35, None, None, int),
-    Field("azimuth", "Azimuth", 35, 40, "°", None, float),
-    Field("elevation", "Elevation", 40, 45, "°", None, float),
-    Field("longitude_direction", "Longitude Direction", 45, 46, None, None, str),
-    Field("longitude", "Longitude", 46, 51, "°", None, float),
-    Field("latitude_direction", "Latitude Direction", 51, 52, None, None, str),
-    Field("latitude", "Latitude", 52, 56, "°", None, float),
-    Field("checksum", "Checksum", 56, 60, None, None, int),
+    Field("temperature", "Temperature", 1, 6, "°C", "temperature", float, icon="mdi:thermometer"),
+    Field("sun_south", "Sun south", 6, 8, "klx", None, int, icon="mdi:sun-compass"),
+    Field("sun_west", "Sun west", 8, 10, "klx", None, int, icon="mdi:sun-compass"),
+    Field("sun_east", "Sun east", 10, 12, "klx", None, int, icon="mdi:sun-compass"),
+    Field("twilight", "Twilight", 12, 13, None, None, _flag, icon="mdi:weather-sunset"),
+    Field("daylight", "Daylight", 13, 16, "lx", "illuminance", int, icon="mdi:brightness-5"),
+    Field("wind", "Wind", 16, 20, "m/s", None, float, icon="mdi:weather-windy"),
+    Field("rain", "Rain", 20, 21, None, None, _flag, icon="mdi:weather-pouring"),
+    Field("weekday", "UTC weekday", 21, 22, None, None, str, icon="mdi:calendar-week"),
+    Field("day", "UTC day", 22, 24, None, None, int, icon="mdi:calendar"),
+    Field("month", "UTC month", 24, 26, None, None, int, icon="mdi:calendar-month"),
+    Field("year", "UTC year", 26, 28, None, None, int, icon="mdi:calendar"),
+    Field("hour", "UTC hour", 28, 30, None, None, int, icon="mdi:clock-outline"),
+    Field("minute", "UTC minute", 30, 32, None, None, int, icon="mdi:clock-outline"),
+    Field("second", "UTC second", 32, 34, None, None, int, icon="mdi:clock-outline"),
+    Field("gps_status", "GPS Status", 34, 35, None, None, int, icon="mdi:crosshairs-gps"),
+    Field("azimuth", "Azimuth", 35, 40, "°", None, float, icon="mdi:compass-outline"),
+    Field("elevation", "Elevation", 40, 45, "°", None, float, icon="mdi:angle-acute"),
+    Field("longitude_direction", "Longitude Direction", 45, 46, None, None, str, icon="mdi:map-marker"),
+    Field("longitude", "Longitude", 46, 51, "°", None, float, icon="mdi:map-marker"),
+    Field("latitude_direction", "Latitude Direction", 51, 52, None, None, str, icon="mdi:map-marker"),
+    Field("latitude", "Latitude", 52, 56, "°", None, float, icon="mdi:map-marker"),
+    Field("checksum", "Checksum", 56, 60, None, None, int, icon="mdi:pound"),
 )
 
 

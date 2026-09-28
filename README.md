@@ -7,10 +7,11 @@ its own Home Assistant sensor entity — no `template:` sensors or manual
 string-slicing required.
 
 OEM brands  : 
-https://www.eltako.com/en/catalog/products/17/wms
+Eltako wms 485 :     https://www.eltako.com/en/catalog/products/17/wms  of https://www.conrad.be/nl/p/eltako-wms-multisensor-voor-weergegevens-opbouw-op-muur-3398210.html 400euro
 
-https://www.elsner-elektronik.de/en/p03-3-rs485.html
+elsner p03-3-rs485 : https://www.elsner-elektronik.de/en/p03-3-rs485.html  408euro
 
+peha WES940 : https://portal.vanegmond.nl/producten/peha-fysische-sensor-bussysteem-d-940-wes/2077988  1000euro
 
 
 

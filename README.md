@@ -222,6 +222,47 @@ with its start byte — `sensor.py` and `ElsnerHub` don't need any changes,
 since they already read whichever protocol matches the frame's first byte
 and build entities from its field list.
 
+
+## Testing tools
+
+This repo includes two ways to test the protocol without necessarily
+having Home Assistant running yet.
+
+### Windows tool
+
+[`WetterstationCOM_13.zip`](https://github.com/v12345vtm/Elsner-Meteo_peha/blob/main/WetterstationCOM_13.zip)
+is a small Windows tool for talking to a real weather station directly, to
+verify wiring and read its data before pointing Home Assistant at it.
+
+**You'll need:**
+- An RS485-to-USB dongle.
+- A 24V DC power supply for the weather station.
+
+**Setup:**
+1. Power the weather station with 24V DC.
+2. Connect the station's `A` and `B` data terminals to the corresponding
+   `A`/`B` terminals on the RS485-to-USB dongle.
+3. Plug the dongle into your Windows PC via USB.
+4. Run the tool, select the dongle's COM port, and you should see live
+   frames coming from the station.
+
+This is the quickest way to confirm your wiring is correct and to capture a
+raw log of real frames (like the ones this protocol was reverse-engineered
+from) before troubleshooting anything on the Home Assistant side.
+
+### Arduino simulator
+
+For testing without a physical weather station connected, this repo also
+includes an Arduino sketch that acts as a simulator: it plays back a set of
+sample `W`-frames (one per second, matching the real device's timing) over
+its USB COM port.
+
+Flash it to any Arduino board, plug it into your Home Assistant machine (or
+the machine running the Windows tool above), and point `serial_port` (or
+the Windows tool's COM port selector) at the Arduino's port instead of a
+real weather station — useful for developing
+
+
 ## Credits
 
 Protocol details taken from the Elsner *P03/3-RS485-GPS/CET Weather Station*

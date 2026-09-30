@@ -1,4 +1,4 @@
-"""Elsner P03/3 weather station frame protocols.
+"""Elsner P03/3 weather station frame protocols. 0.0.6
 
 Supported variants:
   - "W": CET (Central European Time)

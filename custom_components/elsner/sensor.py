@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 
 from serial import SerialException
 import serial_asyncio_fast as serial_asyncio
@@ -49,7 +50,7 @@ async def async_setup_platform(
 
 
 class ElsnerHub:
-    """Owns the single serial connection and auto-detects protocol variant."""
+    """ v0.0.6 Owns the single serial connection and auto-detects protocol variant."""
 
     def __init__(
         self,
@@ -109,36 +110,75 @@ class ElsnerHub:
                 )
             except SerialException:
                 if not logged_error:
-                    _LOGGER.exception(
-                        "Unable to connect to serial device %s. Will retry",
+                    _LOGGER.error(
+                        "Elsner (%s): could not open the serial port - check "
+                        "the port path and permissions. Will keep retrying "
+                        "every 5 seconds.",
                         self._port,
                     )
                     logged_error = True
                 await self._handle_error()
                 continue
 
-            _LOGGER.info("Serial device %s connected", self._port)
+            _LOGGER.info("Elsner (%s): serial port connected", self._port)
             logged_error = False
             while True:
                 try:
                     raw = await asyncio.wait_for(reader.readuntil(b"\x03"), timeout=10.0)
                 except asyncio.TimeoutError:
-                    _LOGGER.warning("Time-out: Geen data ontvangen binnen 10 seconden op %s", self._port)
+                    if not os.path.exists(self._port):
+                        # The device node itself is gone - the USB/RS485
+                        # adapter was very likely unplugged, not just the
+                        # weather station's A/B wiring.
+                        _LOGGER.error(
+                            "Elsner (%s): serial port no longer exists - the "
+                            "USB/RS485 adapter appears to have been "
+                            "unplugged. Will reconnect automatically once "
+                            "it's back.",
+                            self._port,
+                        )
+                    else:
+                        # Port is still there, so this is the adapter/OS
+                        # still being fine but the station itself going
+                        # quiet (powered off, A/B disconnected, etc.).
+                        _LOGGER.warning(
+                            "Elsner (%s): no frame received for 10 seconds - "
+                            "the port is still present, so this looks like "
+                            "the station itself (power or A/B wiring), not "
+                            "the USB adapter.",
+                            self._port,
+                        )
                     await self._handle_error()
                     break
                 except asyncio.IncompleteReadError:
-                    _LOGGER.exception("Incomplete frame from %s", self._port)
-                    await self._handle_error()
-                    break
-                except asyncio.LimitOverrunError:
-                    _LOGGER.exception(
-                        "Frame from %s exceeded buffer limit without ETX",
+                    _LOGGER.warning(
+                        "Elsner (%s): incomplete frame - the connection was "
+                        "interrupted mid-frame.",
                         self._port,
                     )
                     await self._handle_error()
                     break
-                except SerialException:
-                    _LOGGER.exception("Error reading serial device %s", self._port)
+                except asyncio.LimitOverrunError:
+                    _LOGGER.warning(
+                        "Elsner (%s): frame exceeded buffer limit without an "
+                        "ETX terminator - check the baud rate and wiring.",
+                        self._port,
+                    )
+                    await self._handle_error()
+                    break
+                except (SerialException, OSError) as err:
+                    # Covers both pyserial's own SerialException and a bare
+                    # OSError (e.g. "No such device") that a vanished
+                    # USB-serial adapter can raise directly, depending on
+                    # the OS/driver - either way this means the connection
+                    # itself broke, almost always because the adapter was
+                    # unplugged.
+                    _LOGGER.error(
+                        "Elsner (%s): lost the serial connection (%s) - most "
+                        "likely the USB/RS485 adapter was unplugged.",
+                        self._port,
+                        err,
+                    )
                     await self._handle_error()
                     break
 

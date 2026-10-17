@@ -1,0 +1,47 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Elsner weerstation",
+        "description": "Stel de USB/RS485-poort in waarop het weerstation is aangesloten. De sensoren verschijnen zodra het eerste datapakket is herkend.",
+        "data": {
+          "name": "Naam",
+          "serial_port": "USB/RS485-poort",
+          "analyse_interval": "Analyse-interval (seconden)"
+        },
+        "data_description": {
+          "name": "Voorvoegsel voor de namen van de sensoren.",
+          "serial_port": "Bijvoorbeeld /dev/serial/by-id/... Dit pad blijft gelijk na een herstart of herplaatsing. /dev/ttyUSB0 kan verspringen.",
+          "analyse_interval": "Minimale tijd tussen twee geanalyseerde datapakketten. 0 = elk datapakket analyseren."
+        }
+      }
+    },
+    "error": {
+      "invalid_port": "Vul een poort in, bijvoorbeeld /dev/serial/by-id/..."
+    },
+    "abort": {
+      "already_configured": "Dit weerstation is al ingesteld."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Instellingen Elsner weerstation",
+        "description": "Na het opslaan wordt de integratie opnieuw geladen.",
+        "data": {
+          "name": "Naam",
+          "serial_port": "USB/RS485-poort",
+          "analyse_interval": "Analyse-interval (seconden)"
+        },
+        "data_description": {
+          "name": "Voorvoegsel voor de namen van de sensoren.",
+          "serial_port": "Bijvoorbeeld /dev/serial/by-id/... Dit pad blijft gelijk na een herstart of herplaatsing. /dev/ttyUSB0 kan verspringen.",
+          "analyse_interval": "Minimale tijd tussen twee geanalyseerde datapakketten. 0 = elk datapakket analyseren."
+        }
+      }
+    },
+    "error": {
+      "invalid_port": "Vul een poort in, bijvoorbeeld /dev/serial/by-id/..."
+    }
+  }
+}

@@ -1,31 +1,34 @@
+"""Sensoren van het Elsner weerstation.
+
+Versie: 0.0.8
+
+- Eén sensor per meetveld van het gedetecteerde protocol (W of G).
+- Eén diagnose-sensor 'Raw packet' met het laatst geanalyseerde ruwe datapakket.
+- Oude YAML-configuratie (sensor: - platform: elsner) wordt eenmalig naar de UI geïmporteerd.
+"""
+
 from __future__ import annotations
 
-import asyncio
 import logging
-import os
+from typing import Any
 
-from serial import SerialException
-import serial_asyncio_fast as serial_asyncio
 import voluptuous as vol
 
 from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
-from homeassistant.const import CONF_NAME, EVENT_HOMEASSISTANT_STOP
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
+from homeassistant.const import CONF_NAME, EntityCategory
 from homeassistant.core import HomeAssistant, callback
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-from homeassistant.util import slugify
 
-from .protocols import PROTOCOLS_BY_START, Field, Protocol, parse_frame
+from .const import CONF_SERIAL_PORT, DEFAULT_NAME, DOMAIN
+from .hub import ElsnerHub
+from .protocols import Field, Protocol
 
 _LOGGER = logging.getLogger(__name__)
 
-CONF_SERIAL_PORT = "serial_port"
-
-DEFAULT_NAME = "Weather station"
-BAUDRATE = 19200
-
-# Sensor variant is auto-detected based on 'W' (CET) or 'G' (GPS) start character.
+# Alleen nog nodig om oude YAML-instellingen te kunnen lezen en importeren.
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_SERIAL_PORT): cv.string,
@@ -40,228 +43,140 @@ async def async_setup_platform(
     async_add_entities: AddEntitiesCallback,
     discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
-    name = config.get(CONF_NAME)
-    port = config.get(CONF_SERIAL_PORT)
+    """Oude YAML-configuratie: importeer die eenmalig naar een config entry."""
+    _LOGGER.warning(
+        "Elsner: setup found in configuration.yaml - it is being imported into the UI. "
+        "You can remove the 'sensor: - platform: elsner' block once the integration "
+        "shows under Settings > Devices & services."
+    )
+    hass.async_create_task(
+        hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_IMPORT},
+            data={
+                CONF_SERIAL_PORT: config[CONF_SERIAL_PORT],
+                CONF_NAME: config[CONF_NAME],
+            },
+        )
+    )
 
-    hub = ElsnerHub(hass, port, BAUDRATE, name, async_add_entities)
 
-    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, hub.stop)
-    await hub.async_start()
-
-
-class ElsnerHub:
-    """ v0.0.6 Owns the single serial connection and auto-detects protocol variant."""
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        port: str,
-        baudrate: int,
-        base_name: str,
-        async_add_entities: AddEntitiesCallback,
-    ) -> None:
-        self.hass = hass
-        self._port = port
-        self._baudrate = baudrate
-        self._base_name = base_name
-        self._async_add_entities = async_add_entities
-        self._task: asyncio.Task | None = None
-        self._entities: dict[str, ElsnerFieldSensor] = {}
-        self._protocol: Protocol | None = None
-
-    async def async_start(self) -> None:
-        self._task = self.hass.loop.create_task(self._read_loop())
-
-    @property
-    def port(self) -> str:
-        return self._port
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Maak de sensoren aan voor deze config entry."""
+    hub: ElsnerHub = entry.runtime_data
 
     @callback
-    def stop(self, event) -> None:
-        if self._task:
-            self._task.cancel()
+    def _add_field_sensors(protocol: Protocol) -> None:
+        """Wordt door de hub aangeroepen zodra het protocol (W of G) herkend is."""
+        entities = [
+            ElsnerFieldSensor(hub, field)
+            for field in protocol.fields
+            if field.key != protocol.checksum_field
+        ]
+        async_add_entities(entities)
+        _LOGGER.info(
+            "Initialized %d entities for Elsner station protocol '%s'",
+            len(entities),
+            protocol.start_char,
+        )
 
-    def _setup_entities_for_protocol(self, protocol: Protocol) -> None:
-        """Create entities dynamically when a protocol is detected."""
-        self._protocol = protocol
-        new_entities = []
-        for field in protocol.fields:
-            if field.key == protocol.checksum_field:
-                continue
-            entity = ElsnerFieldSensor(self, self._base_name, field)
-            self._entities[field.key] = entity
-            new_entities.append(entity)
-
-        if new_entities:
-            self._async_add_entities(new_entities, True)
-            _LOGGER.info(
-                "Initialized %d entities for Elsner station protocol '%s'",
-                len(new_entities),
-                protocol.start_char,
-            )
-
-    async def _read_loop(self) -> None:
-        logged_error = False
-        while True:
-            try:
-                reader, _ = await serial_asyncio.open_serial_connection(
-                    url=self._port,
-                    baudrate=self._baudrate,
-                )
-            except SerialException:
-                if not logged_error:
-                    _LOGGER.error(
-                        "Elsner (%s): could not open the serial port - check "
-                        "the port path and permissions. Will keep retrying "
-                        "every 5 seconds.",
-                        self._port,
-                    )
-                    logged_error = True
-                await self._handle_error()
-                continue
-
-            _LOGGER.info("Elsner (%s): serial port connected", self._port)
-            logged_error = False
-            while True:
-                try:
-                    raw = await asyncio.wait_for(reader.readuntil(b"\x03"), timeout=10.0)
-                except asyncio.TimeoutError:
-                    if not os.path.exists(self._port):
-                        # The device node itself is gone - the USB/RS485
-                        # adapter was very likely unplugged, not just the
-                        # weather station's A/B wiring.
-                        _LOGGER.error(
-                            "Elsner (%s): serial port no longer exists - the "
-                            "USB/RS485 adapter appears to have been "
-                            "unplugged. Will reconnect automatically once "
-                            "it's back.",
-                            self._port,
-                        )
-                    else:
-                        # Port is still there, so this is the adapter/OS
-                        # still being fine but the station itself going
-                        # quiet (powered off, A/B disconnected, etc.).
-                        _LOGGER.warning(
-                            "Elsner (%s): no frame received for 10 seconds - "
-                            "the port is still present, so this looks like "
-                            "the station itself (power or A/B wiring), not "
-                            "the USB adapter.",
-                            self._port,
-                        )
-                    await self._handle_error()
-                    break
-                except asyncio.IncompleteReadError:
-                    _LOGGER.warning(
-                        "Elsner (%s): incomplete frame - the connection was "
-                        "interrupted mid-frame.",
-                        self._port,
-                    )
-                    await self._handle_error()
-                    break
-                except asyncio.LimitOverrunError:
-                    _LOGGER.warning(
-                        "Elsner (%s): frame exceeded buffer limit without an "
-                        "ETX terminator - check the baud rate and wiring.",
-                        self._port,
-                    )
-                    await self._handle_error()
-                    break
-                except (SerialException, OSError) as err:
-                    # Covers both pyserial's own SerialException and a bare
-                    # OSError (e.g. "No such device") that a vanished
-                    # USB-serial adapter can raise directly, depending on
-                    # the OS/driver - either way this means the connection
-                    # itself broke, almost always because the adapter was
-                    # unplugged.
-                    _LOGGER.error(
-                        "Elsner (%s): lost the serial connection (%s) - most "
-                        "likely the USB/RS485 adapter was unplugged.",
-                        self._port,
-                        err,
-                    )
-                    await self._handle_error()
-                    break
-
-                frame = raw[:-1].decode("utf-8", errors="replace").strip()
-                if not frame:
-                    continue
-
-                start_char = frame[0]
-                if start_char not in PROTOCOLS_BY_START:
-                    _LOGGER.debug("Discarding unrecognized frame start: %r", frame)
-                    continue
-
-                if self._protocol is None:
-                    self._setup_entities_for_protocol(PROTOCOLS_BY_START[start_char])
-                elif start_char != self._protocol.start_char:
-                    _LOGGER.debug(
-                        "Discarding frame with unexpected start byte %r "
-                        "(locked onto protocol '%s')",
-                        start_char,
-                        self._protocol.start_char,
-                    )
-                    continue
-
-                protocol = self._protocol
-
-                if len(frame) != protocol.frame_length:
-                    _LOGGER.debug(
-                        "Frame length mismatch for protocol '%s': expected %d, got %d",
-                        start_char,
-                        protocol.frame_length,
-                        len(frame),
-                    )
-                    continue
-
-                _LOGGER.debug("Received frame (%s): %s", start_char, frame)
-                values = parse_frame(protocol, frame)
-                for entity in self._entities.values():
-                    entity.handle_values(values)
-
-    async def _handle_error(self) -> None:
-        for entity in self._entities.values():
-            entity.handle_values(None)
-        await asyncio.sleep(5)
+    hub.async_set_protocol_callback(_add_field_sensors)
+    async_add_entities([ElsnerRawPacketSensor(hub)])
 
 
 class ElsnerFieldSensor(SensorEntity):
-    """One entity for one field of the detected protocol."""
+    """Eén entiteit per meetveld van het gedetecteerde protocol."""
 
     _attr_should_poll = False
-    _attr_available = False
 
-    def __init__(self, hub: ElsnerHub, base_name: str, field: Field) -> None:
+    def __init__(self, hub: ElsnerHub, field: Field) -> None:
         self._hub = hub
         self._field = field
-        self._attr_name = f"{base_name} {field.name}"
+        # Entiteitnamen en unique_id's blijven gelijk aan de vorige versie,
+        # zodat bestaande entity_id's en dashboards blijven werken.
+        self._attr_name = f"{hub.name} {field.name}"
+        self._attr_unique_id = f"{hub.base_uid}_{field.key}"
+        self._attr_device_info = hub.device_info
         self._attr_native_unit_of_measurement = field.unit
         self._attr_device_class = field.device_class
         self._attr_icon = field.icon
-        self._attr_native_value = None
-        self._attr_unique_id = f"elsner_{slugify(hub.port)}_{field.key}"
-        
-        # FIX: Vertel Home Assistant expliciet dat deze entiteit 3 decimalen moet tonen
+        # lx/klx: toon 3 decimalen (HA regelt de weergave)
         if field.unit in ("lx", "klx"):
             self._attr_suggested_display_precision = 3
 
-    def handle_values(self, values: dict[str, object] | None) -> None:
-        if values is None:
-            if self._attr_available:
-                self._attr_available = False
-                self.async_write_ha_state()
-            return
+    async def async_added_to_hass(self) -> None:
+        """Abonneer op de hub zodra de entiteit in HA staat."""
+        self.async_on_remove(self._hub.async_add_listener(self._handle_hub_update))
+        self._apply_hub_state()
 
-        new_value = values.get(self._field.key)
-        
-        # Zorg ervoor dat het intern als float verwerkt wordt, HA regelt de weergave 
-        # op basis van de suggested_display_precision (3)
-        if self._field.unit in ("lx", "klx") and new_value is not None:
+    @callback
+    def _handle_hub_update(self) -> None:
+        self._apply_hub_state()
+        self.async_write_ha_state()
+
+    @callback
+    def _apply_hub_state(self) -> None:
+        hub = self._hub
+        self._attr_available = hub.available and hub.values is not None
+        value = hub.values.get(self._field.key) if hub.values else None
+        if value is not None and self._field.unit in ("lx", "klx"):
             try:
-                new_value = float(new_value)
-            except (ValueError, TypeError):
+                value = float(value)
+            except (TypeError, ValueError):
                 pass
-        
-        if not self._attr_available or self._attr_native_value != new_value:
-            self._attr_native_value = new_value
-            self._attr_available = True
-            self.async_write_ha_state()
+        self._attr_native_value = value
+
+
+class ElsnerRawPacketSensor(SensorEntity):
+    """Diagnose-sensor: toont het laatst geanalyseerde ruwe datapakket."""
+
+    _attr_should_poll = False
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:code-braces"
+    # Deze velden wijzigen bij elke analyse; niet in de recorder opslaan (minder database-groei).
+    _unrecorded_attributes = frozenset(
+        {"raw", "analysed_at", "length", "frames_received", "frames_analysed",
+         "frames_skipped", "frames_invalid"}
+    )
+
+    def __init__(self, hub: ElsnerHub) -> None:
+        self._hub = hub
+        self._attr_name = f"{hub.name} Raw packet"
+        self._attr_unique_id = f"{hub.base_uid}_raw_packet"
+        self._attr_device_info = hub.device_info
+
+    async def async_added_to_hass(self) -> None:
+        """Abonneer op de hub zodra de entiteit in HA staat."""
+        self.async_on_remove(self._hub.async_add_listener(self._handle_hub_update))
+        self._apply_hub_state()
+
+    @callback
+    def _handle_hub_update(self) -> None:
+        self._apply_hub_state()
+        self.async_write_ha_state()
+
+    @callback
+    def _apply_hub_state(self) -> None:
+        hub = self._hub
+        self._attr_available = hub.available
+        # Een HA-status mag maximaal 255 tekens zijn; de volledige tekst staat in 'raw'.
+        self._attr_native_value = hub.raw[:255] if hub.raw else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        hub = self._hub
+        return {
+            "raw": hub.raw,
+            "variant": hub.variant,
+            "length": len(hub.raw) if hub.raw else 0,
+            "analysed_at": hub.analysed_at,
+            "analyse_interval": hub.analyse_interval,
+            "frames_received": hub.frames_received,
+            "frames_analysed": hub.frames_analysed,
+            "frames_skipped": hub.frames_skipped,
+            "frames_invalid": hub.frames_invalid,
+        }

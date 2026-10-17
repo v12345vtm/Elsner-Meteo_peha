@@ -1,0 +1,47 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Elsner weather station",
+        "description": "Set up the USB/RS485 port the weather station is connected to. The sensors appear as soon as the first data packet has been recognised.",
+        "data": {
+          "name": "Name",
+          "serial_port": "USB/RS485 port",
+          "analyse_interval": "Analyse interval (seconds)"
+        },
+        "data_description": {
+          "name": "Prefix for the names of the sensors.",
+          "serial_port": "For example /dev/serial/by-id/... This path stays the same after a restart or replug. /dev/ttyUSB0 can change.",
+          "analyse_interval": "Minimum time between two analysed data packets. 0 = analyse every data packet."
+        }
+      }
+    },
+    "error": {
+      "invalid_port": "Enter a port, for example /dev/serial/by-id/..."
+    },
+    "abort": {
+      "already_configured": "This weather station is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Elsner weather station settings",
+        "description": "After saving, the integration is reloaded.",
+        "data": {
+          "name": "Name",
+          "serial_port": "USB/RS485 port",
+          "analyse_interval": "Analyse interval (seconds)"
+        },
+        "data_description": {
+          "name": "Prefix for the names of the sensors.",
+          "serial_port": "For example /dev/serial/by-id/... This path stays the same after a restart or replug. /dev/ttyUSB0 can change.",
+          "analyse_interval": "Minimum time between two analysed data packets. 0 = analyse every data packet."
+        }
+      }
+    },
+    "error": {
+      "invalid_port": "Enter a port, for example /dev/serial/by-id/..."
+    }
+  }
+}

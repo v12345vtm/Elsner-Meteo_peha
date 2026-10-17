@@ -1,269 +1,289 @@
-# Elsner Weather Station (P03/3-RS485)
+# Elsner P03/3-RS485 weerstation voor Home Assistant
+
+Deze custom integratie leest de datapakketten van een Elsner P03/3-RS485 weerstation en maakt er sensoren van in Home Assistant. Het weerstation sluit je via RS485 en een RS485-naar-USB-adapter aan op de computer waarop Home Assistant draait. Alles werkt lokaal, zonder cloud.
+
+**Versie 0.0.8** · domein `elsner`
+
 
 ![Elsner OEM or Peha meteo](https://i.imgur.com/j1rQMRT.png)
 
-A Home Assistant custom integration for the **Elsner P03/3-RS485** weather
-station family (temperature, wind, sun brightness, rain, daylight). It talks
-to the station over its RS485/serial output and exposes each measurement as
-its own Home Assistant sensor entity — no `template:` sensors or manual
-string-slicing required.
 
-Both frame shapes the device can send are supported out of the box: **CET**
-(`W...` frames) and **GPS** (`G...` frames, adding UTC time and sun azimuth/
-elevation/position). Nothing to configure — the integration detects which
-one your station sends from the first byte of the first frame and builds
-the matching entities automatically (see [How it works](#how-it-works)).
+## Inhoud
 
-## Compatible hardware
+- [Wat doet de integratie](#wat-doet-de-integratie)
+- [Wat je nodig hebt](#wat-je-nodig-hebt)
+- [Installatie](#installatie)
+- [Instellingen](#instellingen)
+- [Overnemen van je YAML-configuratie](#overnemen-van-je-yaml-configuratie)
+- [Entiteiten](#entiteiten)
+- [Analyse-interval](#analyse-interval)
+- [Automatisch resetten bij uitval](#automatisch-resetten-bij-uitval)
+- [Probleemoplossing](#probleemoplossing)
+- [Technische details](#technische-details)
+- [Wijzigingen](#wijzigingen)
+- [Problemen melden](#problemen-melden)
 
-The Elsner P03/3-RS485 appears to be sold under other brand names as well,
-seemingly the same hardware with an OEM label. These are reported to use the
-same RS485 ASCII protocol (`W`/`G` frames as described below), so this
-integration should work with them unmodified — but that's based on the specs
-looking identical, not on having tested each one directly, so treat it as
-"likely compatible" rather than guaranteed until confirmed against a real
-serial log.
+## Wat doet de integratie
 
-| Brand              | Model         | Approx. price | Product page                                                                                                                                     |
-|---------------------|---------------|:---------------:|-----------------------------------------------------------------------------------------------------------------------------------------------|
-| Elsner Elektronik    | P03/3-RS485   | €408           | [elsner-elektronik.de](https://www.elsner-elektronik.de/en/p03-3-rs485.html)                                                                    |
-| Eltako               | WMS 485       | €400           | [eltako.com](https://www.eltako.com/en/catalog/products/17/wms) · [conrad.be](https://www.conrad.be/nl/p/eltako-wms-multisensor-voor-weergegevens-opbouw-op-muur-3398210.html) |
-| PEHA (by ABB)        | WES 940       | €1000          | [portal.vanegmond.nl](https://portal.vanegmond.nl/producten/peha-fysische-sensor-bussysteem-d-940-wes/2077988)                                  |
+- Leest elk datapakket van het weerstation via de USB/RS485-poort.
+- Maakt per meetwaarde een sensor: temperatuur, wind, regen, zonlicht, schemering, datum en tijd. De GPS-variant voegt daar positie (breedte- en lengtegraad), azimut, elevatie en GPS-status aan toe.
+- Toont het laatst geanalyseerde ruwe datapakket in een diagnose-sensor, zodat je ziet wat het weerstation stuurt.
+- Heeft een knop om de USB-verbinding opnieuw op te zetten.
+- Wordt helemaal ingesteld in de gebruikersinterface van Home Assistant.
 
-If you're running this integration against one of the other brands, an issue
-or PR confirming it (ideally with a raw serial log captured the same way as
-the frames this protocol table was built from) is very welcome — it turns
-"likely compatible" into a confirmed entry in this table.
+De integratie herkent zelf welke variant je weerstation heeft: **CET** (datapakketten die beginnen met `W`) of **GPS** (beginnen met `G`).
 
-## How it works
+## Wat je nodig hebt
 
-The weather station streams one ASCII frame per second, terminated with an
-ETX (`0x03`) byte. In practice there are only two frame shapes: frames
-starting with `W` (weather data only - the CET variant) and frames starting
-with `G` (adds GPS/UTC time and sun position). The integration opens the
-serial port once, reads frame by frame, **auto-detects which protocol is in
-use from that first byte**, and fans the parsed values out to one sensor
-entity per field:
+- Home Assistant, een recente versie.
+- Een Elsner P03/3-RS485 weerstation met CET- of GPS-uitvoer.
+- Een RS485-naar-USB-adapter, aangesloten op de A- en B-aansluitingen van het weerstation. Volg de bedradingsinstructies van het weerstation.
+- Toegang tot de USB-poort vanuit Home Assistant. Zie [De poort vinden](#de-poort-vinden).
 
-```mermaid
-flowchart LR
-    A["Weather station<br/>(RS485 / serial)"] -->|"one ASCII frame<br/>per second, ends in 0x03"| B["ElsnerHub<br/>reads until 0x03"]
-    B --> E{"first byte?"}
-    E -->|"W"| C1["CET protocol"]
-    E -->|"G"| C2["GPS protocol"]
-    C1 --> D1["sensor.temperature"]
-    C1 --> D2["sensor.wind"]
-    C1 --> D3["sensor. ...one per field"]
-    C2 --> D4["sensor. ...GPS fields"]
+De benodigde Python-bibliotheek (`pyserial-asyncio-fast`) wordt automatisch geïnstalleerd.
+
+## Installatie
+
+1. Kopieer de map `custom_components/elsner` naar de map `custom_components` in je Home Assistant-configuratiemap. Dat is de map waarin ook `configuration.yaml` staat. Het resultaat is `config/custom_components/elsner/`.
+2. Controleer of de map de bestanden bevat zoals in [Mappenstructuur](#mappenstructuur), inclusief de map `translations`.
+3. Herstart Home Assistant volledig. Een herlaad van de integratie is niet genoeg, omdat het manifest is veranderd.
+4. Ga naar **Instellingen > Apparaten en diensten**, klik op **Integratie toevoegen** en zoek op **Elsner**.
+
+## Instellingen
+
+Bij het toevoegen vul je drie velden in:
+
+| Veld | Betekenis | Standaard |
+|---|---|---|
+| **Naam** | Voorvoegsel voor de namen van de entiteiten, bijvoorbeeld `Weather station`. | `Weather station` |
+| **USB/RS485-poort** | Het pad naar de adapter, bijvoorbeeld `/dev/serial/by-id/...`. | `/dev/ttyUSB0` |
+| **Analyse-interval (seconden)** | Minimale tijd tussen twee geanalyseerde datapakketten. `0` betekent elk datapakket analyseren. | `5` |
+
+### De poort vinden
+
+Het pad `/dev/ttyUSB0` kan na een herstart of herplaatsing veranderen. Kies daarom bij voorkeur een vast pad uit `/dev/serial/by-id/`:
+
+```bash
+ls -l /dev/serial/by-id/
 ```
 
-The protocol is detected once, from the very first frame the integration
-sees after startup - the field entities are then created to match. Reading
-frame-by-frame (rather than a fixed byte count) matters because the frame
-length differs per protocol variant and because a fixed-size read can drift
-out of sync with the actual frame boundaries over time.
+Kies de regel die bij jouw adapter hoort. Voer het commando uit in de terminal van de machine waarop Home Assistant draait. Op Home Assistant OS heb je daarvoor een terminal-add-on nodig die toegang heeft tot USB.
 
-## Installation
+### Instellingen wijzigen
 
-1. Copy the `elsner` folder into `<config_dir>/custom_components/elsner/`,
-   so you end up with `<config_dir>/custom_components/elsner/manifest.json`,
-   `sensor.py`, `protocols.py`, etc.
-2. Restart Home Assistant.
-3. Add a `sensor:` entry to your `configuration.yaml` (see below).
-4. Restart Home Assistant again so the new requirement
-   (`pyserial-asyncio-fast`) is installed.
+1. Ga naar **Instellingen > Apparaten en diensten** en open **Elsner**.
+2. Klik op **Configureren**, pas de waarden aan en sla op.
 
-## Configuration
+De integratie laadt daarna opnieuw. De entity_id's blijven hetzelfde, dus dashboards en automatiseringen blijven werken. Een andere naam verandert alleen de weergavenaam van de entiteiten.
+
+## Overnemen van je YAML-configuratie
+
+Had je de integratie eerder in `configuration.yaml` staan?
 
 ```yaml
-# configuration.yaml
 sensor:
   - platform: elsner
-    name: weather_station
-    serial_port: /dev/ttyACM1
+    serial_port: /dev/ttyUSB0
+    name: Weather station
 ```
 
-| Parameter      | Required | Default            | Description                                                                                     |
-|----------------|:--------:|---------------------|---------------------------------------------------------------------------------------------------|
-| `platform`     | yes      | –                   | Must be `elsner`.                                                                                  |
-| `serial_port`  | yes      | –                   | Path to the serial device the station is connected to, e.g. `/dev/ttyACM1` or `/dev/ttyUSB0`.     |
-| `name`         | no       | `Weather station`   | Base name used as a prefix for every generated entity, e.g. `weather_station` → `sensor.weather_station_temperature`. |
+Dan wordt die instelling bij de eerste start automatisch overgenomen in de gebruikersinterface. Verwijder daarna het blok uit `configuration.yaml`. Bij het overnemen krijgt het analyse-interval de standaardwaarde van 5 seconden. Wijzig dat via **Configureren** als je elk datapakket wilt analyseren.
 
-There's no `variant` setting to get wrong: the integration reads the first
-byte of the first frame it receives (`W` or `G`) and builds the matching
-entities automatically. Entities only appear once that first frame has been
-read, so give it a second or two after startup.
+## Entiteiten
 
-The baud rate (19200) is fixed to match the station's datasheet and isn't
-configurable.
+Elke entiteit krijgt de naam die je bij **Naam** hebt ingevuld, gevolgd door de veldnaam. Met de standaardnaam ontstaan bijvoorbeeld `sensor.weather_station_temperature` en `sensor.weather_station_wind`. De veldnamen staan in het Engels, zoals ze in Home Assistant verschijnen. Alle entiteiten horen bij één apparaat met dezelfde naam.
 
-> **Multiple stations:** add a second `- platform: elsner` block with its
-> own `serial_port` and a different `name`; each block gets its own serial
-> connection and its own set of entities.
+### Meetsensoren
 
-## Entities
+Welke sensoren je krijgt, hangt af van de variant van je weerstation. Bij de CET-variant zijn datum en tijd Centraal-Europese tijd. Bij de GPS-variant zijn ze in UTC. Schemering (Twilight) en regen (Rain) tonen `True` of `False`.
 
-With `name: weather_station` and a station sending **CET** (`W...`) frames,
-the integration creates:
+De kolom **Tekens** geeft de posities in het datapakket, geteld vanaf 0. Het startteken staat op positie 0.
 
-| Entity                                | Type    | Unit  | Description                                  |
-|----------------------------------------|---------|-------|-----------------------------------------------|
-| `sensor.weather_station_temperature`   | float   | °C    | Outdoor temperature                           |
-| `sensor.weather_station_wind`          | float   | m/s   | Wind speed                                    |
-| `sensor.weather_station_sun_south`     | int     | klx   | South-facing brightness sensor                |
-| `sensor.weather_station_sun_west`      | int     | klx   | West-facing brightness sensor                 |
-| `sensor.weather_station_sun_east`      | int     | klx   | East-facing brightness sensor                 |
-| `sensor.weather_station_daylight`      | int     | lx    | General daylight level                        |
-| `sensor.weather_station_twilight`      | bool    | –     | `true` below ~10 lx                           |
-| `sensor.weather_station_rain`          | bool    | –     | `true` while the heated rain sensor is wet    |
-| `sensor.weather_station_weekday`       | str     | –     | ISO weekday of the station's clock, `1`–`7`   |
-| `sensor.weather_station_day`           | int     | –     | Day of month (station's clock)                |
-| `sensor.weather_station_month`         | int     | –     | Month (station's clock)                       |
-| `sensor.weather_station_year`          | int     | –     | Two-digit year (station's clock)              |
-| `sensor.weather_station_hour`          | int     | –     | Hour (station's clock, CET)                   |
-| `sensor.weather_station_minute`        | int     | –     | Minute                                        |
-| `sensor.weather_station_second`        | int     | –     | Second                                        |
-| `sensor.weather_station_summer_time`   | str     | –     | `J` = daylight saving active, `N` = not, per the station's clock |
+<details>
+<summary>Sensoren van de CET-variant (startteken W)</summary>
 
-Wind is reported in m/s straight from the datasheet; multiply by 3.6 in a
-template sensor if you'd rather have km/h.
+| Veld | Tekens | Eenheid | Type |
+|---|---|---|---|
+| Temperature | 1–5 | °C | decimaal getal |
+| Sun south | 6–7 | klx | geheel getal |
+| Sun west | 8–9 | klx | geheel getal |
+| Sun east | 10–11 | klx | geheel getal |
+| Twilight | 12 | - | True / False |
+| Daylight | 13–15 | lx | geheel getal |
+| Wind | 16–19 | m/s | decimaal getal |
+| Rain | 20 | - | True / False |
+| Weekday | 21 | - | tekst |
+| Day | 22–23 | - | geheel getal |
+| Month | 24–25 | - | geheel getal |
+| Year | 26–27 | - | geheel getal |
+| Hour | 28–29 | - | geheel getal |
+| Minute | 30–31 | - | geheel getal |
+| Second | 32–33 | - | geheel getal |
+| Summer time | 34 | - | tekst |
 
-If your station instead sends **GPS** (`G...`) frames, you get a different
-set of entities — the shared measurements (temperature, sun, wind, rain)
-plus UTC time and sun position instead of local date/time:
+</details>
 
-| Entity                                        | Type  | Unit  | Description                                      |
-|-------------------------------------------------|-------|-------|-----------------------------------------------------|
-| `sensor.weather_station_temperature`             | float | °C    | Outdoor temperature                                 |
-| `sensor.weather_station_wind`                    | float | m/s   | Wind speed                                          |
-| `sensor.weather_station_sun_south`               | int   | klx   | South-facing brightness sensor                      |
-| `sensor.weather_station_sun_west`                | int   | klx   | West-facing brightness sensor                       |
-| `sensor.weather_station_sun_east`                | int   | klx   | East-facing brightness sensor                       |
-| `sensor.weather_station_daylight`                | int   | lx    | General daylight level                              |
-| `sensor.weather_station_twilight`                | bool  | –     | `true` below ~10 lx                                 |
-| `sensor.weather_station_rain`                    | bool  | –     | `true` while the heated rain sensor is wet          |
-| `sensor.weather_station_weekday`                 | str   | –     | UTC weekday, `1`–`7`, or `?` if not synced          |
-| `sensor.weather_station_day`                     | int   | –     | UTC day of month                                    |
-| `sensor.weather_station_month`                   | int   | –     | UTC month                                           |
-| `sensor.weather_station_year`                    | int   | –     | UTC two-digit year                                  |
-| `sensor.weather_station_hour`                    | int   | –     | UTC hour                                            |
-| `sensor.weather_station_minute`                  | int   | –     | UTC minute                                          |
-| `sensor.weather_station_second`                  | int   | –     | UTC second                                          |
-| `sensor.weather_station_gps_status`              | int   | –     | `1` = GPS fix OK, `0` = not OK                      |
-| `sensor.weather_station_azimuth`                 | float | °     | Sun azimuth                                         |
-| `sensor.weather_station_elevation`               | float | °     | Sun elevation                                       |
-| `sensor.weather_station_longitude_direction`     | str   | –     | `O` (east) or `W` (west)                            |
-| `sensor.weather_station_longitude`               | float | °     | Longitude, unsigned — combine with the direction above |
-| `sensor.weather_station_latitude_direction`      | str   | –     | `N` (north) or `S` (south)                          |
-| `sensor.weather_station_latitude`                | float | °     | Latitude, unsigned — combine with the direction above  |
+<details>
+<summary>Sensoren van de GPS-variant (startteken G)</summary>
 
-A station only ever sends one of these two frame shapes, so you'll only ever
-see one of these two entity sets for a given `serial_port`.
+| Veld | Tekens | Eenheid | Type |
+|---|---|---|---|
+| Temperature | 1–5 | °C | decimaal getal |
+| Sun south | 6–7 | klx | geheel getal |
+| Sun west | 8–9 | klx | geheel getal |
+| Sun east | 10–11 | klx | geheel getal |
+| Twilight | 12 | - | True / False |
+| Daylight | 13–15 | lx | geheel getal |
+| Wind | 16–19 | m/s | decimaal getal |
+| Rain | 20 | - | True / False |
+| UTC weekday | 21 | - | tekst |
+| UTC day | 22–23 | - | geheel getal |
+| UTC month | 24–25 | - | geheel getal |
+| UTC year | 26–27 | - | geheel getal |
+| UTC hour | 28–29 | - | geheel getal |
+| UTC minute | 30–31 | - | geheel getal |
+| UTC second | 32–33 | - | geheel getal |
+| GPS Status | 34 | - | geheel getal |
+| Azimuth | 35–39 | ° | decimaal getal |
+| Elevation | 40–44 | ° | decimaal getal |
+| Longitude Direction | 45 | - | tekst |
+| Longitude | 46–50 | ° | decimaal getal |
+| Latitude Direction | 51 | - | tekst |
+| Latitude | 52–55 | ° | decimaal getal |
 
-### Example Lovelace card
+</details>
+
+### Raw packet (diagnose)
+
+De sensor **Raw packet** is een diagnose-sensor. Zijn status is het laatst geanalyseerde datapakket. Een Home Assistant-status mag maximaal 255 tekens lang zijn, daarom staat de volledige tekst in het attribuut `raw`.
+
+| Attribuut | Betekenis |
+|---|---|
+| `raw` | Het volledige datapakket, zonder het afsluitende ETX-teken |
+| `variant` | `CET` of `GPS` |
+| `length` | Lengte van het datapakket |
+| `analysed_at` | Tijdstip van de laatste analyse (UTC) |
+| `analyse_interval` | Het ingestelde analyse-interval in seconden |
+| `frames_received` | Aantal ontvangen datapakketten sinds de laatste start of herlaad |
+| `frames_analysed` | Aantal geanalyseerde datapakketten |
+| `frames_skipped` | Aantal datapakketten dat door het interval is overgeslagen |
+| `frames_invalid` | Aantal afgekeurde datapakketten (verkeerd startteken, verkeerde lengte of andere variant) |
+
+### Knop Reset USB connection
+
+Met de knop **Reset USB connection** sluit de integratie de seriële poort en opent die opnieuw. De entiteit heet standaard `button.weather_station_reset_usb_connection`.
+
+Gebruik de knop als de sensoren niet meer worden bijgewerkt, of na het losmaken en opnieuw aansluiten van de adapter. De variant blijft daarbij bewaard. Heeft de adapter een ander pad gekregen, dan helpt de knop niet. Pas de poort dan eerst aan via **Configureren**.
+
+## Analyse-interval
+
+Het weerstation stuurt regelmatig datapakketten. Het analyse-interval bepaalt hoe vaak de integratie er één verwerkt:
+
+- **5** (standaard): er wordt hooguit één datapakket per 5 seconden geanalyseerd. De sensoren worden dan ongeveer elke 5 seconden bijgewerkt.
+- **0**: elk datapakket wordt geanalyseerd, zoals in versie 0.0.6.
+
+Pakketten die worden overgeslagen, worden wel ontvangen en geteld. De verbinding blijft dus actief, en Home Assistant hoeft minder werk te doen.
+
+## Automatisch resetten bij uitval
+
+Wil je dat de integratie zichzelf herstelt als de sensoren te lang onbeschikbaar zijn? Maak dan een automatisering die de reset-knop indrukt. Pas de entity_id's aan als je een andere naam hebt gekozen. Dit voorbeeld werkt vanaf Home Assistant 2024.10.
 
 ```yaml
-type: entities
-title: Weather station
-entities:
-  - sensor.weather_station_temperature
-  - sensor.weather_station_wind
-  - sensor.weather_station_sun_south
-  - sensor.weather_station_sun_west
-  - sensor.weather_station_sun_east
-  - sensor.weather_station_daylight
-  - sensor.weather_station_twilight
-  - sensor.weather_station_rain
-  - sensor.weather_station_weekday
-  - sensor.weather_station_day
-  - sensor.weather_station_month
-  - sensor.weather_station_year
-  - sensor.weather_station_hour
-  - sensor.weather_station_minute
-  - sensor.weather_station_second
-  - sensor.weather_station_summer_time
+automation:
+  - alias: Elsner weerstation resetten bij uitval
+    triggers:
+      - trigger: state
+        entity_id: sensor.weather_station_temperature
+        to: unavailable
+        for: "00:02:00"
+    actions:
+      - action: button.press
+        target:
+          entity_id: button.weather_station_reset_usb_connection
 ```
 
-## Architecture
+Let op: deze automatisering reset ook als het weerstation zelf uitstaat. Dat is meestal geen probleem, maar je ziet het wel in het logboek.
 
-The integration is split into three layers so that supporting another
-protocol variant never touches the parts that already work:
+## Probleemoplossing
 
-- **`protocols.py`** — pure data. Each variant (`cet`, `gps`) is an
-  ordered tuple of `Field`s, each with its byte offsets (straight from the
-  Elsner datasheet), unit, and type cast. This is the *only* file you touch
-  to add a variant.
-- **`ElsnerHub`** — owns the single serial connection for a configured
-  platform entry. It reads one frame at a time up to the `0x03` terminator.
-  On the first frame it ever sees, it looks at the start byte (`W` or `G`),
-  picks the matching protocol, and builds the entities for that protocol's
-  fields on the spot. From then on it discards anything that doesn't start
-  with that same byte (auto-resync on a corrupted or truncated frame),
-  parses each frame via `protocols.parse_frame()`, and pushes the resulting
-  dict to every registered entity.
-- **`ElsnerFieldSensor`** — one lightweight entity per field. It just reads
-  its own key out of whatever dict the hub last handed it.
+Begin bij het logboek: ga naar **Instellingen > Systeem > Logboeken** en filter op `elsner`. Wil je meer details, zet dan debug-logging aan in `configuration.yaml`:
 
-A `verify_checksum()` helper in `protocols.py` is also available if you want
-the hub to drop frames whose checksum doesn't match (the CET variant's
-checksum was verified against real captured frames during development and
-matches).
+```yaml
+logger:
+  logs:
+    custom_components.elsner: debug
+```
 
-## Both frame shapes are already implemented
+Deze meldingen komen het vaakst voor:
 
-Earlier versions of this README described GPS support as a TODO. That's
-done now: `protocols.py` has both `CET_FIELDS` and `GPS_FIELDS` filled in
-from the datasheet's byte tables, and both are registered in `PROTOCOLS`.
-There's nothing left to fill in for either shape the device can send.
+| Melding in het logboek | Waarschijnlijke oorzaak | Wat je kunt doen |
+|---|---|---|
+| `could not open the serial port` | De poort bestaat niet, of Home Assistant heeft er geen toegang toe. | Controleer het pad met `ls -l /dev/serial/by-id/`. Draait Home Assistant in een Docker-container, geef de poort dan door aan de container, bijvoorbeeld met `--device`. |
+| `serial port no longer exists` | De adapter is losgekoppeld of heeft een ander pad gekregen. | Sluit de adapter opnieuw aan. Heeft hij een ander pad, pas de poort dan aan via **Configureren**. |
+| `no frame received` | De poort bestaat, maar er komt geen data binnen. | Controleer de voeding van het weerstation en de bedrading van A en B. Probeer A en B eens om te wisselen. |
+| `only invalid frames` | Er komen datapakketten binnen, maar ze worden afgekeurd. | Controleer de bedrading en de variant. Kijk ook naar `frames_invalid` in de Raw packet-sensor. |
+| `frame exceeded buffer limit` | Pakketten worden niet met het ETX-teken afgesloten. | Dat wijst meestal op een verkeerd signaal of bedrading. Controleer de aansluiting van de adapter. |
 
-If Elsner ever ships a third frame variant, the same pattern still applies:
-add a `Field` tuple for it in `protocols.py` and register it in `PROTOCOLS`
-with its start byte — `sensor.py` and `ElsnerHub` don't need any changes,
-since they already read whichever protocol matches the frame's first byte
-and build entities from its field list.
+Verder komen deze situaties regelmatig voor:
 
+- **Na het wisselen van weerstation** (van CET naar GPS of omgekeerd) komen er geen waarden meer. De variant wordt bij het eerste geldige datapakket vastgelegd. Herlaad de integratie via het menu met de drie puntjes, met **Herladen**.
+- **De waarden lopen achter.** Het analyse-interval staat waarschijnlijk hoger dan je wilt. Zet het op `0`.
+- **De integratie reageert niet meer.** Druk op **Reset USB connection**. Helpt dat niet, herstart dan Home Assistant en meld het probleem met de logregels, zie [Problemen melden](#problemen-melden).
 
-## Testing tools
+## Technische details
 
-This repo includes two ways to test the protocol without necessarily
-having Home Assistant running yet.
+### Datapakket
 
-### Windows tool
+- Een datapakket begint met het startteken `W` (CET) of `G` (GPS) en eindigt met het teken ETX (`0x03`).
+- De lengte is vast: 39 tekens voor `W` en 60 tekens voor `G`, zonder het ETX-teken.
+- De seriële verbinding gebruikt 19200 baud.
+- Het eerste geldige datapakket bepaalt de variant. Die blijft vastgelegd tot de integratie opnieuw wordt geladen.
+- De checksum wordt uitgelezen, maar nog niet gecontroleerd, en niet als sensor getoond.
 
-[`WetterstationCOM_13.zip`](https://github.com/v12345vtm/Elsner-Meteo_peha/blob/main/WetterstationCOM_13.zip)
-is a small Windows tool for talking to a real weather station directly, to
-verify wiring and read its data before pointing Home Assistant at it.
+### Tijdgedrag
 
-**You'll need:**
-- An RS485-to-USB dongle.
-- A 24V DC power supply for the weather station.
+| Instelling | Waarde | Betekenis |
+|---|---|---|
+| Wachttijd op een datapakket | 10 seconden | Komt er binnen 10 seconden geen volledig datapakket, dan wordt de poort opnieuw geopend. |
+| Pauze tussen twee pogingen | 5 seconden | Wachttijd voordat de integratie de poort opnieuw probeert te openen. |
+| Geen geldig datapakket | 60 seconden | Komen er 60 seconden geen geldige datapakketten binnen, maar wel ongeldige, dan worden de sensoren onbeschikbaar. |
 
-**Setup:**
-1. Power the weather station with 24V DC.
-2. Connect the station's `A` and `B` data terminals to the corresponding
-   `A`/`B` terminals on the RS485-to-USB dongle.
-3. Plug the dongle into your Windows PC via USB.
-4. Run the tool, select the dongle's COM port, and you should see live
-   frames coming from the station.
+### Mappenstructuur
 
-This is the quickest way to confirm your wiring is correct and to capture a
-raw log of real frames (like the ones this protocol was reverse-engineered
-from) before troubleshooting anything on the Home Assistant side.
+```text
+Elsner-Meteo_peha/
+├── README.md
+└── custom_components/
+    └── elsner/
+        ├── __init__.py
+        ├── button.py
+        ├── config_flow.py
+        ├── const.py
+        ├── hub.py
+        ├── manifest.json
+        ├── protocols.py
+        ├── sensor.py
+        └── translations/
+            ├── en.json
+            └── nl.json
+```
 
-### Arduino simulator
+## Wijzigingen
 
-For testing without a physical weather station connected, this repo also
-includes an Arduino sketch that acts as a simulator: it plays back a set of
-sample `W`-frames (one per second, matching the real device's timing) over
-its USB COM port.
+### 0.0.8
 
-Flash it to any Arduino board, plug it into your Home Assistant machine (or
-the machine running the Windows tool above), and point `serial_port` (or
-the Windows tool's COM port selector) at the Arduino's port instead of a
-real weather station — useful for developing
+- Instellingen via de gebruikersinterface: naam, poort en analyse-interval.
+- Eenmalige overname van de YAML-configuratie.
+- Analyse-interval, standaard 5 seconden.
+- Diagnose-sensor **Raw packet** met het ruwe datapakket en tellers.
+- Knop **Reset USB connection**.
+- De seriële verbinding wordt altijd eerst gesloten voordat er opnieuw wordt geopend.
+- Sensoren worden onbeschikbaar als er alleen ongeldige datapakketten binnenkomen.
 
+### 0.0.6
 
-## Credits
+- Configuratie via `configuration.yaml`.
 
-Protocol details taken from the Elsner *P03/3-RS485-GPS/CET Weather Station*
-datasheet (version 23.10.2023).
+## Problemen melden
+
+Heb je een probleem of een idee? Open dan een [issue](https://github.com/v12345vtm/Elsner-Meteo_peha/issues). Voeg de versie van de integratie, de logregels (filter op `elsner`) en de waarde van `frames_invalid` toe.

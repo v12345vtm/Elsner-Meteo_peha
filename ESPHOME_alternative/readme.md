@@ -1,4 +1,4 @@
-<!-- Versie: 0.1.0 (readme voor components/elsner v0.1.0 en esphome/*.yaml v0.1.0) -->
+<!-- Versie: 0.1.1 (readme; components/elsner v0.1.0, esphome/*.yaml v0.1.1) -->
 
 # Elsner P03/3 weerstation: ESPHome-variant
 
@@ -29,27 +29,28 @@ Het protocol, de velden en de throttle zijn gelijk aan de HA-versie. De timers e
 ## Mapstructuur
 
 ```
-Elsner-Meteo_peha/
-├── custom_components/elsner/        HA-integratie (ongewijzigd, v0.0.8)
-├── components/elsner/               ESPHome-component (v0.1.0)  <- ESPHome haalt deze map op
-│   ├── __init__.py                  hub: UART en analyse_interval
-│   ├── const.py                     meetvelden met eenheid, icoon en device_class
-│   ├── sensor.py                    sensor-platform
-│   ├── binary_sensor.py             binary_sensor-platform (regen, schemering, checksum)
-│   ├── text_sensor.py               text_sensor-platform (tekst en diagnose)
-│   ├── button.py                    reset-knop
-│   ├── elsner_core.h                protocol + frame-parser, pure C++ (testbaar zonder ESPHome)
-│   ├── elsner.h / elsner.cpp        ESPHome-glue: UART-lus, timers, publicatie
-└── esphome/
-    ├── readme.md                    deze uitleg
-    ├── elsner-package.yaml          package: UART, hub en alle entiteiten
-    ├── example-bluetooth-proxy.yaml voorbeeld naast jouw Bluetooth-proxy
-    └── tests/
-        ├── test_parity.cpp          C++-kant van de paritytest
-        └── parity_ha.py             vergelijkt de C++-parser met de echte HA-code
+Elsner-Meteo_peha/                           (root van de repo)
+├── custom_components/elsner/                 HA-integratie (ongewijzigd, v0.0.8)
+└── ESPHOME_alternative/elsner-esphome/       ESPHome-variant
+    ├── components/elsner/                    ESPHome-component (v0.1.0)
+    │   ├── __init__.py                       hub: UART en analyse_interval
+    │   ├── const.py                          meetvelden met eenheid, icoon en device_class
+    │   ├── sensor.py                         sensor-platform
+    │   ├── binary_sensor.py                  binary_sensor-platform (regen, schemering, checksum)
+    │   ├── text_sensor.py                    text_sensor-platform (tekst en diagnose)
+    │   ├── button.py                         reset-knop
+    │   ├── elsner_core.h                     protocol + frame-parser, pure C++ (testbaar zonder ESPHome)
+    │   └── elsner.h / elsner.cpp             ESPHome-glue: UART-lus, timers, publicatie
+    └── esphome/
+        ├── readme.md                         deze uitleg
+        ├── elsner-package.yaml               package: UART, hub en alle entiteiten
+        ├── example-bluetooth-proxy.yaml      voorbeeld naast jouw Bluetooth-proxy
+        └── tests/
+            ├── test_parity.cpp               C++-kant van de paritytest
+            └── parity_ha.py                  vergelijkt de C++-parser met de echte HA-code
 ```
 
-Alleen `components/elsner/` en `esphome/` zijn nieuw. De HA-integratie blijft zoals hij is. ESPHome leest `components/`, Home Assistant leest `custom_components/`. Ze botsen dus niet.
+Alleen de map `ESPHOME_alternative/elsner-esphome/` is nieuw. De HA-integratie in `custom_components/` blijft zoals hij is. Ze botsen dus niet.
 
 ---
 
@@ -67,15 +68,15 @@ Het package `elsner-package.yaml` bevat zelf al een `external_components`-blok. 
 ```yaml
 packages:
   esphome.bluetooth-proxy: github://esphome/bluetooth-proxies/esp32-generic/esp32-generic.yaml@main
-  elsner: github://v12345vtm/Elsner-Meteo_peha/esphome/elsner-package.yaml@main
+  elsner: github://v12345vtm/Elsner-Meteo_peha/ESPHOME_alternative/elsner-esphome/esphome/elsner-package.yaml@main
 ```
 
 De ketting bij compileren is dan:
 
 ```
 esphome compile
- ├─ packages: haalt esphome/elsner-package.yaml op uit GitHub
- │    └─ external_components: haalt components/elsner/ op uit GitHub (branch main)
+ ├─ packages: haalt ESPHOME_alternative/elsner-esphome/esphome/elsner-package.yaml op uit GitHub
+ │    └─ external_components: haalt ESPHOME_alternative/elsner-esphome/components/elsner/ op uit GitHub (branch main)
  └─ jouw eigen YAML + Bluetooth-proxy-package
 ```
 
@@ -87,6 +88,7 @@ external_components:
       type: git
       url: https://github.com/v12345vtm/Elsner-Meteo_peha
       ref: main
+    path: ESPHOME_alternative/elsner-esphome/components   # waar de component in de repo staat
     refresh: 0s           # tijdens ontwikkelen: altijd opnieuw ophalen
     components: [elsner]
 
@@ -104,7 +106,12 @@ elsner:
 
 **Praktische punten:**
 
-- **Pushen naar GitHub.** De map `components/elsner/` en de map `esphome/` moeten in de `main`-branch staan. Pas je `ref:` aan als je op een andere branch of een tag werkt. Met een tag (bijv. `ref: v0.1.0`) kun je een vaste versie vastzetten.
+- **Pad in de repo.** Jouw bestanden staan in `ESPHOME_alternative/elsner-esphome/`. ESPHome zoekt de component standaard in `components/` in de root van de repo. Daarom moet `path:` in `external_components` het juiste pad aangeven. Zonder die regel vindt ESPHome de component niet. Verplaats je de map later naar de root van de repo, dan kun je `path:` weglaten.
+- **Pushen.** De versie op GitHub moet de bijgewerkte bestanden bevatten, dus pushen naar `main` na elke wijziging. Pas `ref:` aan als je op een andere branch of tag werkt.
+- **Controle.** Open de volgende links in de browser. Krijg je de inhoud te zien (en geen 404), dan vindt ESPHome de bestanden ook:
+  - `https://raw.githubusercontent.com/v12345vtm/Elsner-Meteo_peha/main/ESPHOME_alternative/elsner-esphome/esphome/elsner-package.yaml`
+  - `https://raw.githubusercontent.com/v12345vtm/Elsner-Meteo_peha/main/ESPHOME_alternative/elsner-esphome/components/elsner/__init__.py`
+- **Publieke repo.** `github://` werkt zonder login alleen bij een publieke repo.
 - **Cache.** ESPHome bewaart de opgehaalde code en haalt hem op na `refresh`. Standaard is dat 1 dag. Zet `refresh: 0s` tijdens het ontwikkelen. Wil je de cache leegmaken, verwijder dan de map `.esphome/external_components` of gebruik `esphome clean`.
 - **Privé-repo.** ESPHome kan ook een privé-repo ophalen met credentials (token). Zie de ESPHome-documentatie over `external_components`. Een publieke repo is eenvoudiger.
 - **Lokaal ontwikkelen.** Wil je zonder GitHub werken, dan kun je de map lokaal kopiëren en `source: local` gebruiken (zie de ESPHome-docs).
@@ -298,12 +305,12 @@ Dit test of de C++-parser dezelfde uitkomst geeft als de echte HA-code. Het gebr
 ```bash
 cd esphome/tests
 g++ -std=c++17 -O1 -I../../components/elsner test_parity.cpp -o test_parity
-python3 parity_ha.py --binary ./test_parity --ha-root ../../custom_components
+python3 parity_ha.py --binary ./test_parity
 ```
 
 Vereist: `g++` en Python 3 (geen extra pakketten).
 
-Het script laadt `custom_components/elsner/hub.py` en `protocols.py` zoals ze zijn. Alleen Home Assistant zelf wordt vervangen door stubs. Daarna stuurt het dezelfde frames naar beide kanten en vergelijkt per frame:
+Het script zoekt de map `custom_components` automatisch (omhoog vanaf het script). Het laadt daar `elsner/hub.py` en `protocols.py` zoals ze zijn. Alleen Home Assistant zelf wordt vervangen door stubs. Daarna stuurt het dezelfde frames naar beide kanten en vergelijkt per frame:
 
 - de tellers (`received`, `analysed`, `skipped`, `invalid`)
 - de variant (CET of GPS) en de checksum-uitkomst
@@ -364,3 +371,4 @@ Het C++-binary draait ook zelftests: overflow, stale en het leegmaken van de buf
 | Versie | Wat |
 |---|---|
 | 0.1.0 | Eerste ESPHome-variant van HA-integratie 0.0.8. Protocol, velden, throttle, timers, reset-knop en paritytest. |
+| 0.1.1 | Padfix: `path:` in `external_components` en de package-URL wijzen naar `ESPHOME_alternative/elsner-esphome/`. Testscript zoekt `custom_components` automatisch. |

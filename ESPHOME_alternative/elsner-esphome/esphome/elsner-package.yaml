@@ -1,10 +1,10 @@
-# Versie: 0.1.0
+# Versie: 0.1.1
 #
 # ESPHome-package voor het Elsner P03/3 weerstation (RS485).
 # Gebruik in je eigen YAML (zie example-bluetooth-proxy.yaml):
 #
 #   packages:
-#     elsner: github://v12345vtm/Elsner-Meteo_peha/esphome/elsner-package.yaml@main
+#     elsner: github://v12345vtm/Elsner-Meteo_peha/ESPHOME_alternative/elsner-esphome/esphome/elsner-package.yaml@main
 #
 # Dit bestand haalt de component zelf op uit GitHub (external_components) en zet
 # de UART, de hub en alle entiteiten klaar. Pinnen en interval zijn aan te passen met
@@ -20,6 +20,9 @@ external_components:
       type: git
       url: https://github.com/v12345vtm/Elsner-Meteo_peha
       ref: main
+    # Map in de repo waarin de component staat. Standaard zoekt ESPHome in
+    # 'components/' in de root van de repo; hier staat de component in een submap.
+    path: ESPHOME_alternative/elsner-esphome/components
     # Hoe vaak ESPHome de GitHub-code opnieuw ophaalt bij compileren.
     # Tijdens ontwikkelen: 0s. Gewoon gebruik: 1h of 1d.
     refresh: 1h

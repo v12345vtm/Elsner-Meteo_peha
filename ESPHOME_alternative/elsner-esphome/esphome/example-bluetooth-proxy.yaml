@@ -1,4 +1,4 @@
-# Versie: 0.1.0
+# Versie: 0.1.1
 #
 # Voorbeeld: jouw bestaande Bluetooth-proxy-config, uitgebreid met het Elsner-weerstation.
 #
@@ -7,7 +7,7 @@
 
 packages:
   esphome.bluetooth-proxy: github://esphome/bluetooth-proxies/esp32-generic/esp32-generic.yaml@main
-  elsner: github://v12345vtm/Elsner-Meteo_peha/esphome/elsner-package.yaml@main
+  elsner: github://v12345vtm/Elsner-Meteo_peha/ESPHOME_alternative/elsner-esphome/esphome/elsner-package.yaml@main
 
 # Pinnen overschrijven? Zet de waarden hier (standaard 16 en 17). Voor een ESP32 met PSRAM
 # (WROVER) zijn GPIO16/17 al in gebruik: kies dan andere pinnen.

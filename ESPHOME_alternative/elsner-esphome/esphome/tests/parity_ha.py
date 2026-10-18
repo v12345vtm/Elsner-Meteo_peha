@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Versie: 0.1.0
+# Versie: 0.1.1
 """Paritytest: de ESPHome-C++-parser moet dezelfde uitkomst geven als de HA-integratie.
 
 Wat er gebeurt:
@@ -10,7 +10,10 @@ Wat er gebeurt:
 
 Gebruik (vanuit de map esphome/tests):
   g++ -std=c++17 -O1 -I../../components/elsner test_parity.cpp -o test_parity
-  python3 parity_ha.py --binary ./test_parity --ha-root ../../custom_components
+  python3 parity_ha.py --binary ./test_parity
+
+De map custom_components wordt automatisch gezocht door omhoog te lopen vanaf dit
+bestand. Staat het script los van de repo, geef dan --ha-root op.
 
 Het script test de frame-verwerking. Het test niet de ESPHome-glue (uart, timers,
 publicatie naar Home Assistant); die moet je met `esphome compile` controleren.
@@ -272,13 +275,22 @@ def compare(name: str, ha_states: list[dict], cpp_states: list[dict]) -> int:
     return problems
 
 
+def find_ha_root() -> Path:
+    """Loop omhoog vanaf dit bestand tot er een custom_components/elsner-map is."""
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "custom_components"
+        if (candidate / "elsner").is_dir():
+            return candidate
+    return Path("custom_components")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--binary", default="./test_parity", help="pad naar de gecompileerde test_parity")
     parser.add_argument(
         "--ha-root",
-        default=str(Path(__file__).resolve().parents[2] / "custom_components"),
-        help="map die de 'elsner'-integratie bevat (standaard: custom_components in de repo)",
+        default=str(find_ha_root()),
+        help="map die de 'elsner'-integratie bevat (standaard: automatisch gezocht)",
     )
     args = parser.parse_args()
 
